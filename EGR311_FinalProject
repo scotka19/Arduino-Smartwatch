@@ -1,0 +1,159 @@
+//Code for a Arduino based smart watch
+//Uses DHT GPS sensors
+#include <Wire.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_GFX.h>
+
+#define OLED_WIDTH 128        //defines dimensions of OLED display
+#define OLED_HEIGHT 64
+
+#define OLED_ADDR   0x3C
+ 
+#include <TinyGPS++.h>        // include TinyGPS++ library
+#include <TimeLib.h>          // include Arduino time library
+#include <SoftwareSerial.h>   // include software serial library
+TinyGPSPlus gps;
+Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT);
+#include <dht.h>
+#define DHT11_PIN 7       //Temp and humidity sensor is connected to pin 7
+dht DHT;
+ 
+SoftwareSerial SoftSerial(8,9);   // configure SoftSerial library TX, RX
+ 
+ 
+#define time_offset   3600  // define a clock offset of 3600 seconds (1 hour) ==> UTC + 1
+ 
+// variable definitions
+char Time[]  = "TIME:      00:00:00";       //time string display
+char Date[]  = "00-00-2000";              //date string display
+byte last_second, Second, Minute, Hour, Day, Month;
+int Year;
+ 
+void setup(void)
+{
+  SoftSerial.begin(9600);  // initialize software serial at 9600 baud
+  display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
+  display.clearDisplay();       //This clears the OLED screen so text can be printed
+  display.setTextSize(2);        //this sets the text font size to 2
+  display.setTextColor(WHITE);      
+  display.setCursor(0, 0);        //this initializes the cursor position on the OLED for the text to start
+  display.println("EGR 311");
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 17);
+  display.println("SmartWatch");
+  display.println("JW, KS, MD");
+  display.display();
+  delay(1000);
+}
+ 
+void loop(){
+    
+  while (SoftSerial.available() > 0)      //if the GPS has a connection
+  {
+    if (gps.encode(SoftSerial.read()))
+    {
+      // get time from GPS module
+      if (gps.time.isValid())
+      {
+        Minute = gps.time.minute();       //reads time information from GPS
+        Second = gps.time.second();
+        Hour   = (gps.time.hour()-5)%12;
+      }
+ 
+      // get date drom GPS module
+      if (gps.date.isValid())       //reads date information from GPS if connected
+      {
+        Day   = gps.date.day();
+        Month = gps.date.month();
+        Year  = gps.date.year();
+      }
+ 
+      if(last_second != gps.time.second())  // if time has changed
+      {
+        last_second = gps.time.second();
+ 
+        // set current UTC time
+        setTime(Hour, Minute, Second, Day, Month, Year);
+        // add the offset to get local time
+        adjustTime(time_offset);
+ 
+        // update time array
+        Time[17] = second() / 10 + '0';         //formats the time for better display
+        Time[18] = second() % 10 + '0';
+        Time[14]  = minute() / 10 + '0';
+        Time[15] = minute() % 10 + '0';
+        Time[11]  = hour()   / 10 + '0';
+        Time[12]  = hour()   % 10 + '0';
+         
+        // update date array
+        Date[8] = (year()  / 10) % 10 + '0';      //formats the date for better display
+        Date[9] =  year()  % 10 + '0';
+        Date[3]  =  month() / 10 + '0';
+        Date[4] =  month() % 10 + '0';
+        Date[0]  =  day()   / 10 + '0';
+        Date[1]  =  day()   % 10 + '0';
+ 
+        // print time & date
+        display.clearDisplay();       //This clears the OLED screen so text can be printed
+        display.setTextSize(2);        //this sets the text font size to 2
+        display.setTextColor(WHITE);      
+        display.setCursor(0, 0);  
+        //display.print(weekday());
+        //display.setCursor(0, 20);     // move cursor to column 0 row 2
+        display.println(Time);         // print time (HH:MM:SS)
+        display.setCursor(0, 40);     // move cursor to column 0 row 3
+        display.println(Date);         // print date (DD-MM-YYYY)
+        display.display();
+        delay(1000);
+      }
+    }
+  }
+  //weather display
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  //display.println("Weather");
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  //display.setCursor(0, 17);
+  float chk = DHT.read11(DHT11_PIN);        //reads data from temperature and humidity sensor
+  display.println("Air Temp: ");
+  //Serial.println(chk);
+  display.print(DHT.temperature*9.0/5.0+32);      //converts temp C to F
+  display.print((char)247);       //print degree symbol
+  display.println(" F");
+  display.display();
+  delay(2000);
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("Humidity: ");
+  display.print((float)DHT.humidity);       //display humidity from sensor data
+  display.print("%");
+  display.display();
+  delay(1000);
+
+ 
+  //GPS code
+  
+  //if(gps.location.isValid())//This will pretty much be fired all the time anyway but will at least reduce it to only after a package of NMEA data comes in
+  //{
+    //Get the latest info from the gps object which it derived from the data sent by the GPS unit
+    display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.print("Latitude:");
+    display.println(gps.location.lat(), 6);   //reads and displays latitude information from gps sensor
+    display.print("Longitude:");
+    display.println(gps.location.lng(), 6);   //reads and displays longitude information from gps sensor
+    display.setTextSize(2);
+    display.println("Speed MPH:");
+    display.println(gps.speed.mph());       //reads and displays speed information from gps sensor
+    display.println("");
+    display.display();
+    delay(2000);
+   //}
+}
+[/code]
